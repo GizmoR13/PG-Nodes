@@ -1,0 +1,29 @@
+{
+  "_comment": "After changes, reset ComfyUI and refresh your browser.",
+  "POS_LIGHT_MAP": {
+	"none": "",
+    "front": ["frontlit", "front lighting"],
+    "back": ["backlit", "back lighting"],
+    "left": ["light from left"],
+    "right": ["light from right"],
+    "top": ["top light"]
+  },
+  "NEG_LIGHT_MAP": {
+	"none": "",
+    "front": ["backlighting artifact", "silhouette loss", "underexposed background"],
+    "back": ["harsh front light", "blown highlights", "lens flare", "specular glare"],
+    "left": ["uneven side glare", "shadow banding on right"],
+    "right": ["uneven side glare", "shadow banding on left"],
+    "top": ["raccoon eyes", "overhead hotspot"]
+  },
+  "LENS_CHOICES": [
+    "none","14mm","24mm","35mm","50mm","85mm","105mm","135mm","200mm","wide-angle","fisheye","macro"
+  ],
+  "TIME_MAP": {
+    "none": "",
+    "morning": "soft morning light",
+    "midday": "bright midday light",
+    "evening": "warm evening golden hour",
+    "night": "low-light nighttime scene"
+  }
+}
