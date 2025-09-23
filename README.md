@@ -19,7 +19,6 @@ Demo video of prompt history:
 * [Unified Loader](#unified-loader)
 * [Just Save Image](#just-save-image)
 * [Installation](#installation)
-* [Node Names & Categories](#node-names--categories)
 * [Configuration](#configuration)
 
 ---
@@ -95,17 +94,6 @@ Minimal nodes that **save** images in an `IMAGE` batch to ComfyUI’s output dir
 
 1. Copy the entire **`comfyui-PG-nodes`** folder into your ComfyUI `./ComfyUI/custom_nodes/` directory.
 2. Restart ComfyUI.
-
----
-
-## Node Names & Categories
-
-* Category: **PG** for all nodes.
-* Display Names:
-
-  * `Lazy Prompt`, `Lazy Prompt (mini)`
-  * `Unified Loader`, `Unified Loader (mini)`
-  * `Just Save Image`, `Just Save Image & Out`
 
 ---
 
