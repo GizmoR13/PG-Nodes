@@ -86,21 +86,20 @@ Minimal nodes that **save** images in an `IMAGE` batch to ComfyUI’s output dir
 
 **Via ComfyUI Manager**
 
-1. Open **ComfyUI Manager**.
-2. Search for **“PG Nodes”**.
-3. Install and restart ComfyUI.
+> 1. Open **ComfyUI Manager**.
+> 2. Search for **“PG Nodes”**.
+> 3. Install and restart ComfyUI.
 
 **Manual**
 
-1. Go to the repo **Code → Download ZIP**.
-2. Extract the ZIP.
-3. Rename the extracted folder to **`comfyui-PG-nodes`** (exact name).
-4. Move that folder to your ComfyUI custom nodes directory:
-
-   * Windows (typical): `C:\Users\<you>\Documents\ComfyUI\custom_nodes\comfyui-PG-nodes`
-   * Or wherever your `ComfyUI` root lives → `custom_nodes/comfyui-PG-nodes`
-5. Restart ComfyUI.
-6. In the node search, look for the **PG** category (e.g., *Lazy Prompt*, *Unified Loader*).
+> 1. Go to the repo **Code → Download ZIP**.
+> 2. Extract the ZIP.
+> 3. Rename the extracted folder to **`comfyui-PG-nodes`** (exact name).
+> 4. Move that folder to your ComfyUI custom nodes directory:
+>    * Windows (typical): `C:\Users\<you>\Documents\ComfyUI\custom_nodes\comfyui-PG-nodes`
+>    * Or wherever your `ComfyUI` root lives → `custom_nodes/comfyui-PG-nodes`
+> 5. Restart ComfyUI.
+> 6. In the node search, look for the **PG** category (e.g., *Lazy Prompt*, *Unified Loader*).
 
 ---
 
