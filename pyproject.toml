@@ -1,5 +1,5 @@
 [project]
-name = "PG-nodes"
+name = "comfyui-PG-nodes"
 version = "1.5.0"
 description = "PG Nodes for ComfyUI"
 requires-python = ">=3.10"
