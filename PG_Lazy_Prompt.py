@@ -399,8 +399,8 @@ class PgLazyPrompt:
             "optional": {}
         }
 
-    RETURN_TYPES  = ("CONDITIONING","CONDITIONING","STRING")
-    RETURN_NAMES  = ("POS_OUT","NEG_OUT","raw")
+    RETURN_TYPES  = ("CONDITIONING","CONDITIONING")
+    RETURN_NAMES  = ("POS_OUT","NEG_OUT")
     FUNCTION      = "build_encode_and_history"
     CATEGORY      = "PG"
     @classmethod
@@ -537,8 +537,7 @@ class PgLazyPrompt:
                 hist["items"] = items
                 _write_history_atomic(history_path, hist)
 
-        raw_text = (pos_text + ("\n---\n" + neg_text if neg_text else "")).strip()
-        return (pos_cond, neg_cond, raw_text)
+        return (pos_cond, neg_cond)
 
 
 class PgLazyPromptMini:
@@ -555,8 +554,8 @@ class PgLazyPromptMini:
             "optional": {}
         }
 
-    RETURN_TYPES  = ("CONDITIONING","CONDITIONING","STRING")
-    RETURN_NAMES  = ("POS_OUT","NEG_OUT","raw")
+    RETURN_TYPES  = ("CONDITIONING","CONDITIONING")
+    RETURN_NAMES  = ("POS_OUT","NEG_OUT")
     FUNCTION      = "build_encode_and_history"
     CATEGORY      = "PG"
     OUTPUT_NODE   = True
@@ -648,17 +647,130 @@ class PgLazyPromptMini:
                 hist["items"] = items
                 _write_history_atomic(history_path, hist)
 
-        raw_text = (pos_text + ("\n---\n" + neg_text if neg_text else "")).strip()
-        return (pos_cond, neg_cond, raw_text)
+        return (pos_cond, neg_cond)
+
+
+class PgLazyPromptExt:
+    DESCRIPTION = "Prompt -> CONDITIONING with on-disk JSON history (LRU). Extended out."
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "clip": ("CLIP", {}),
+                "positive": ("STRING", {"multiline": True, "default": ""}),
+                "negative": ("STRING", {"multiline": True, "default": ""}),
+            },
+            "optional": {}
+        }
+
+    RETURN_TYPES  = ("CONDITIONING","CONDITIONING","STRING","STRING")
+    RETURN_NAMES  = ("POS_OUT","NEG_OUT","pos_raw","neg_raw")
+    FUNCTION      = "build_encode_and_history"
+    CATEGORY      = "PG"
+    OUTPUT_NODE   = True
+
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        if not PG_ALWAYS_REROLL:
+            return None
+        try:
+            positive_val = kwargs.get('positive', '')
+        except Exception:
+            positive_val = ''
+        if has_choice_syntax(positive_val):
+            try:
+                return time.time_ns()
+            except Exception:
+                return time.time()
+        return None
+
+    def build_encode_and_history(
+        self,
+        clip,
+        positive,
+        negative,
+        history_ui_slot: str = "",
+    ):
+        _ = history_ui_slot
+
+        positive_orig = (positive or "").strip()
+        negative_raw  = (negative or "").strip()
+
+        # Reroll seed if enabled (env `PG_REROLL` overrides)
+        _reroll = bool(PG_ALWAYS_REROLL)
+        try:
+            if "PG_REROLL" in os.environ:
+                _reroll = bool(int(os.environ.get("PG_REROLL", "0")))
+        except Exception:
+            pass
+        _seed = None
+        if _reroll:
+            try:
+                _seed = time.time_ns() & 0xFFFFFFFF
+            except Exception:
+                _seed = int(time.time()*1000) & 0xFFFFFFFF
+        positive_raw = expand_choices(positive_orig, seed=_seed)
+
+        pos_text = positive_raw
+        neg_text = negative_raw
+
+        # Encode
+        if nodes is None:
+            raise RuntimeError("ComfyUI 'nodes' not available")
+        pos_cond, = nodes.CLIPTextEncode().encode(clip, pos_text)
+        neg_cond, = nodes.CLIPTextEncode().encode(clip, neg_text)
+
+        # History write (skip if both empty)
+        if (positive_orig == "" and negative_raw == ""):
+            print("[PG history] skip: empty positive & negative; not saving (mini)")
+        else:
+            _hp, _me = _get_prefs()
+            history_path = _normalize_history_path(_hp)
+            max_entries = int(_me)
+
+            core = {"positive": positive_orig, "negative": negative_raw}
+            key_hash = _compute_key_hash(core)
+            now = int(time.time())
+            record = {
+                "key_hash": key_hash,
+                "positive": core["positive"],
+                "negative": core["negative"],
+                "created_at": now,
+                "last_used_at": now,
+                "hits": 1,
+            }
+            with _HIST_LOCK:
+                hist = _read_history(history_path)
+                items = hist.get("items", [])
+                before_len = len(items)
+                ix = _find_by_hash(items, key_hash)
+                if ix >= 0:
+                    old = items.pop(ix)
+                    record["created_at"] = int(old.get("created_at", now))
+                    record["hits"] = int(old.get("hits", 0)) + 1
+
+                items.insert(0, record)
+                items = _trim_lru(items, max_entries)
+                print(f"[PG history mini] save: before={before_len} after={len(items)} max_entries={max_entries}")
+
+                hist["items"] = items
+                _write_history_atomic(history_path, hist)
+
+        pos_raw_text = (pos_text).strip()
+        neg_raw_text = (neg_text).strip()
+        return (pos_cond, neg_cond, pos_raw_text, neg_raw_text)
 
 
 NODE_CLASS_MAPPINGS = {
     "PgLazyPrompt": PgLazyPrompt,
     "PgLazyPromptMini": PgLazyPromptMini,
+    "PgLazyPromptExt": PgLazyPromptExt,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "PgLazyPrompt": "Lazy Prompt",
     "PgLazyPromptMini": "Lazy Prompt (mini)",
+    "PgLazyPromptExt": "Lazy Prompt (ext)",
 }
 
 

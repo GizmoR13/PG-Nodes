@@ -42,6 +42,12 @@ The core idea of **Lazy Prompt** is comfort: write a prompt once, and bring it b
 * Default cap: `max_entries = 500`.
 * **Tip:** right‑click the node (⋯) to open the **context menu** and tweak the history file path or the maximum number of stored entries.
 
+**Lazy Prompt (ext)**
+
+* Starting with version 1.5.0, I added “Lazy Prompt (ext)”, which includes outputs for interoperability with other nodes:
+
+![Lazy Prompt ext pic](./examples/Lazy_Prompt_ext.png)
+
 ---
 
 ## Unified Loader
@@ -122,6 +128,13 @@ Minimal nodes that **save** images in an `IMAGE` batch to ComfyUI’s output dir
 * You can adjust **history path** and **max entries** from the node’s **context menu**.
 
 ## Versioning & Updates
-- Current version: **1.0.0** (`__init__.py` → `VERSION`).
-- We use SemVer (MAJOR.MINOR.PATCH). See `CHANGELOG.md`.
-- To update: ComfyUI Manager → **Update Custom Nodes** → restart ComfyUI.
+
+### [1.0.0]
+#### Added
+- Initial public release.
+- Nodes: Lazy Prompt (+mini), Unified Loader (+mini), Just Save Image (+Out).
+- Prompt history JSON + config file `PG_Lazy_Prompt_Config.json`.
+
+### [1.5.0]
+#### Added
+- Lazy Prompt (ext).

@@ -75,8 +75,8 @@ import { app } from "../../scripts/app.js";
     ANCHOR: 'port',
 
     // Manual constants (when AUTO_FROM_NODE_SIZE = false)
-    X_LEFT: 26,
-    Y_OFFSET: 18,
+    X_LEFT: 30,
+    Y_OFFSET: 10,
     GAP: 0,
     FIXED_X: 20,
     FIXED_Y: 120,
@@ -90,16 +90,16 @@ import { app } from "../../scripts/app.js";
     // Auto from node.size
     AUTO_FROM_NODE_SIZE: true,        // enable auto‑scaling
     AUTO_RATIOS: {                    // ratios relative to node.size
-      X_LEFT: 0.30,                   // % of node width
+      X_LEFT: 0.33,                   // % of node width
       GAP: 0,                         // % of node height
-      BTN_W: 0.38,                    // % of width
+      BTN_W: 0.32,                    // % of width
       BTN_H: 0.39,                    // % of height
       PAD:   0.50                     // % of width
     },
     AUTO_CLAMP: {                     // safe clamps
       X_LEFT: [25, 500],
       GAP:    [0, 0],
-      BTN_W:  [42, 500],
+      BTN_W:  [22, 500],
       BTN_H:  [10, 24],
       PAD:    [6, 16]
     },
@@ -114,23 +114,33 @@ import { app } from "../../scripts/app.js";
   function graph(){ var a = app(); return a && a.graph ? a.graph : null; }
   function findWidget(node, name){ if (!node || !node.widgets) return null; for (var i=0;i<node.widgets.length;i++){ var w=node.widgets[i]; if (w && w.name===name) return w; } return null; }
   function get(node, key, def){ var w=findWidget(node,key); return (w&&typeof w.value!=='undefined')?w.value:def; }
-  function isPgLazyPromptClass(x){
-    const cls = (
-      x?.comfyClass || x?.type || x?.name || x?.title ||
-      x?.constructor?.comfyClass || x?.constructor?.type || ''
-    );
-    const s = String(cls);
-    return s === 'PgLazyPrompt' || s === 'PgLazyPromptMini' || s === 'Lazy Prompt' || s === 'Lazy Prompt (mini)';
+  const PG_LAZY_NAMES = new Set([
+    // class names
+    'PgLazyPrompt', 'PgLazyPromptMini', 'PgLazyPromptExt',
+    // display titles as they appear in ComfyUI UI
+    'Lazy Prompt', 'Lazy Prompt (mini)', 'Lazy Prompt (ext)',
+  ]);
+  function _norm(x){
+    return (x == null ? '' : String(x));
   }
-  const PG_LAZY_CLASSES = new Set(['PgLazyPrompt','PgLazyPromptMini','Lazy Prompt','Lazy Prompt (mini)']);
+  function _collectNames(x){
+    if (!x) return [];
+    const out = [];
+    out.push(_norm(x.comfyClass), _norm(x.type), _norm(x.name), _norm(x.title));
+    const c = x.constructor || {};
+    out.push(_norm(c.comfyClass), _norm(c.type), _norm(c.name), _norm(c.title));
+    return out.filter(Boolean);
+  }
+  function _matchesAnyLazyName(x){
+    return _collectNames(x).some(n => PG_LAZY_NAMES.has(n));
+  }
+  function isPgLazyPromptClass(x){
+    return _matchesAnyLazyName(x);
+  }
   const __isMaybeOurs = (nodeType, nodeData) => (
-    isPgLazyPromptClass(nodeType) ||
-    isPgLazyPromptClass(nodeData) ||
-    PG_LAZY_CLASSES.has(nodeType?.comfyClass) || PG_LAZY_CLASSES.has(nodeType?.name) || PG_LAZY_CLASSES.has(nodeType?.title) ||
-    PG_LAZY_CLASSES.has(nodeData?.comfyClass) || PG_LAZY_CLASSES.has(nodeData?.name) || PG_LAZY_CLASSES.has(nodeData?.title) ||
-    (nodeType?.title === 'Lazy Prompt' || nodeType?.title === 'Lazy Prompt (mini)') ||
-    (nodeData?.title === 'Lazy Prompt' || nodeData?.title === 'Lazy Prompt (mini)')
+    _matchesAnyLazyName(nodeType) || _matchesAnyLazyName(nodeData)
   );
+  
   function _isCollapsed(n){ try { return !!(n && (n.flags?.collapsed || n.collapsed)); } catch(_) { return false; } }
   function setPreview(node, txt, opts){
     try{
@@ -252,7 +262,7 @@ import { app } from "../../scripts/app.js";
 
       // 1) Fast path: class/type match
       var cls = (node.comfyClass || node.type || '').toString();
-      if (PG_LAZY_CLASSES.has(cls)) return true;
+      if (PG_LAZY_NAMES.has(cls)) return true;
 
       // 2) Heuristic by widget names (works even if some optional widgets are gone)
       var W = Array.isArray(node.widgets) ? node.widgets : [];
@@ -708,22 +718,31 @@ import { app } from "../../scripts/app.js";
     try { g?.setDirtyCanvas?.(true,true); } catch(_){ }
   }
 
-  function isPgLazyPromptClass(x){
-    const cls = (
-      x?.comfyClass || x?.type || x?.name || x?.title ||
-      x?.constructor?.comfyClass || x?.constructor?.type || ''
-    );
-    const s = String(cls);
-    return s === 'PgLazyPrompt' || s === 'PgLazyPromptMini' || s === 'Lazy Prompt' || s === 'Lazy Prompt (mini)';
+  const PG_LAZY_NAMES = new Set([
+    // class names
+    'PgLazyPrompt', 'PgLazyPromptMini', 'PgLazyPromptExt',
+    // display titles as they appear in ComfyUI UI
+    'Lazy Prompt', 'Lazy Prompt (mini)', 'Lazy Prompt (ext)',
+  ]);
+  function _norm(x){
+    return (x == null ? '' : String(x));
   }
-  const PG_LAZY_CLASSES = new Set(['PgLazyPrompt','PgLazyPromptMini','Lazy Prompt','Lazy Prompt (mini)']);
+  function _collectNames(x){
+    if (!x) return [];
+    const out = [];
+    out.push(_norm(x.comfyClass), _norm(x.type), _norm(x.name), _norm(x.title));
+    const c = x.constructor || {};
+    out.push(_norm(c.comfyClass), _norm(c.type), _norm(c.name), _norm(c.title));
+    return out.filter(Boolean);
+  }
+  function _matchesAnyLazyName(x){
+    return _collectNames(x).some(n => PG_LAZY_NAMES.has(n));
+  }
+  function isPgLazyPromptClass(x){
+    return _matchesAnyLazyName(x);
+  }
   const __isMaybeOurs = (nodeType, nodeData) => (
-    isPgLazyPromptClass(nodeType) ||
-    isPgLazyPromptClass(nodeData) ||
-    PG_LAZY_CLASSES.has(nodeType?.comfyClass) || PG_LAZY_CLASSES.has(nodeType?.name) || PG_LAZY_CLASSES.has(nodeType?.title) ||
-    PG_LAZY_CLASSES.has(nodeData?.comfyClass) || PG_LAZY_CLASSES.has(nodeData?.name) || PG_LAZY_CLASSES.has(nodeData?.title) ||
-    (nodeType?.title === 'Lazy Prompt' || nodeType?.title === 'Lazy Prompt (mini)') ||
-    (nodeData?.title === 'Lazy Prompt' || nodeData?.title === 'Lazy Prompt (mini)')
+    _matchesAnyLazyName(nodeType) || _matchesAnyLazyName(nodeData)
   );
 
   function __attachPrefsOnce(nodeType){
