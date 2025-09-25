@@ -53,7 +53,7 @@ def _resolve_cfg_path() -> str:
     cwd  = os.getcwd()
     candidates = [
         os.path.join(here, "PG_Lazy_Prompt_Config.json"),
-        os.path.join(cwd,  "custom_nodes", "comfyui-PG-nodes", "PG_Lazy_Prompt_Config.json"),
+        os.path.join(cwd,  "custom_nodes", "PG-nodes", "PG_Lazy_Prompt_Config.json"),
         os.path.join(cwd,  "custom_nodes", "PG_Lazy_Prompt_Config.json"),
     ]
     for p in candidates:

@@ -94,10 +94,10 @@ Minimal nodes that **save** images in an `IMAGE` batch to ComfyUI’s output dir
 
 > 1. Go to the repo **Code → Download ZIP**.
 > 2. Extract the ZIP.
-> 3. Rename the extracted folder to **`comfyui-PG-nodes`** (exact name).
+> 3. Rename the extracted folder to **`PG-nodes`**.
 > 4. Move that folder to your ComfyUI custom nodes directory:
->    * Windows (typical): `C:\Users\<you>\Documents\ComfyUI\custom_nodes\comfyui-PG-nodes`
->    * Or wherever your `ComfyUI` root lives → `custom_nodes/comfyui-PG-nodes`
+>    * Windows (typical): `C:\Users\<you>\Documents\ComfyUI\custom_nodes\PG-nodes`
+>    * Or wherever your `ComfyUI` root lives → `custom_nodes/PG-nodes`
 > 5. Restart ComfyUI.
 > 6. In the node search, look for the **PG** category (e.g., *Lazy Prompt*, *Unified Loader*).
 
@@ -121,3 +121,7 @@ Minimal nodes that **save** images in an `IMAGE` batch to ComfyUI’s output dir
 * Defaults at runtime: `history_path = custom_nodes\prompt_history.json`, `max_entries = 500`.
 * You can adjust **history path** and **max entries** from the node’s **context menu**.
 
+## Versioning & Updates
+- Current version: **1.0.0** (`__init__.py` → `VERSION`).
+- We use SemVer (MAJOR.MINOR.PATCH). See `CHANGELOG.md`.
+- To update: ComfyUI Manager → **Update Custom Nodes** → restart ComfyUI.

@@ -1,3 +1,5 @@
+VERSION = "1.0.0"
+__version__ = VERSION
 
 import importlib
 import pkgutil
@@ -9,7 +11,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {}
 def _merge(mod):
     for k, v in getattr(mod, "NODE_CLASS_MAPPINGS", {}).items():
         if k in NODE_CLASS_MAPPINGS and NODE_CLASS_MAPPINGS[k] is not v:
-            print(f"[comfyui-PG-nodes] WARNING: duplicate node key '{k}' — keeping last one")
+            print(f"[PG-nodes] WARNING: duplicate node key '{k}' — keeping last one")
         NODE_CLASS_MAPPINGS[k] = v
     for k, v in getattr(mod, "NODE_DISPLAY_NAME_MAPPINGS", {}).items():
         NODE_DISPLAY_NAME_MAPPINGS[k] = v
@@ -26,5 +28,5 @@ for info in pkgutil.iter_modules([str(pkg_path)]):
         _merge(mod)
 
 WEB_DIRECTORY = "web"
-print("[comfyui-PG-nodes] loaded:",
+print("[PG-nodes] loaded:",
       ", ".join(NODE_CLASS_MAPPINGS.keys()))
