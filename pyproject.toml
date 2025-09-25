@@ -3,3 +3,6 @@ name = "PG-nodes"
 version = "1.5.0"
 description = "PG Nodes for ComfyUI"
 requires-python = ">=3.10"
+
+[project.urls]
+Repository = "https://github.com/GizmoR13/PG-Nodes"
