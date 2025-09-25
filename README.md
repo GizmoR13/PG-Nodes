@@ -138,3 +138,7 @@ Minimal nodes that **save** images in an `IMAGE` batch to ComfyUI’s output dir
 ### [1.5.0]
 #### Added
 - Lazy Prompt (ext).
+
+## [1.5.5] - 2025-09-25
+### Added
+- "Unified Loader", DIFFUSION_MODEL output fix and Class name.

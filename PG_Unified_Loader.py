@@ -619,24 +619,24 @@ class PgUnifiedLoader:
                 "upscale": (lists["Load Upscale Model"], {"default": "none", "label": "Upscale"}),
 
                 # Divider as dropdown (single, disabled option)
-                "models_options": (["——  MODELS OPTIONS  ——"], {
-                    "default": "——  MODELS OPTIONS  ——",
-                    "label": "MODELS OPTIONS",
+                "_": ([""], {
+                    "default": "",
+                    "label": "",
                     "tooltip": "UI divider — inactive",
                     "disabled": True,
                 }),
 
                 # Types
-                "clip_type": (CLIP_TYPES, {"default": "stable_diffusion", "label": "Clip_type"}),
                 "diffusion_type": (
                     ["default", "fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2"],
                     {"default": "default", "label": "Diffusion_type"},
                 ),
+                "clip_type": (CLIP_TYPES, {"default": "stable_diffusion", "label": "Clip_type"}),
             }
         }
 
     # IPADAPTER precedes UPSCALE_MODEL in the tuple
-    RETURN_TYPES = ("MODEL", "CLIP", "VAE", "DIFFUSION_MODEL", "CLIP", "VAE", "CLIP_VISION", "CONTROL_NET", "IPADAPTER", "UPSCALE_MODEL")
+    RETURN_TYPES = ("MODEL", "CLIP", "VAE", "MODEL", "CLIP", "VAE", "CLIP_VISION", "CONTROL_NET", "IPADAPTER", "UPSCALE_MODEL")
     RETURN_NAMES = ("CP_MODEL", "CP_CLIP", "CP_VAE", "DIFFUSION_MODEL", "CLIP", "VAE", "CLIP_VISION", "CONTROLNET", "IPADAPTER", "UPSCALE_MODEL")
     FUNCTION = "run"
 
@@ -656,7 +656,7 @@ class PgUnifiedLoader:
             controlnet: str,
             ipadapter: str,
             upscale: str,
-            models_options: str,
+            _: str,
             clip_type: str,
             diffusion_type: str,
             ):
@@ -736,7 +736,7 @@ class PgUnifiedLoader:
 
 
 # --- MINI NODE ----------------------------------------------------------------------------------
-class UnifiedLoaderMini:
+class PgUnifiedLoaderMini:
     CATEGORY = "PG"
     NODE_DISPLAY_NAME = "Unified Loader (mini)"
 
@@ -821,10 +821,10 @@ class UnifiedLoaderMini:
 # Node registry -----------------------------------------------------------------------------------
 NODE_CLASS_MAPPINGS = {
     "PgUnifiedLoader": PgUnifiedLoader,
-    "UnifiedLoaderMini": UnifiedLoaderMini,
+    "PgUnifiedLoaderMini": PgUnifiedLoaderMini,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "PgUnifiedLoader": PgUnifiedLoader.NODE_DISPLAY_NAME,
-    "UnifiedLoaderMini": UnifiedLoaderMini.NODE_DISPLAY_NAME,
+    "PgUnifiedLoaderMini": PgUnifiedLoaderMini.NODE_DISPLAY_NAME,
 }

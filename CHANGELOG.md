@@ -10,3 +10,7 @@ All notable changes to this project will be documented in this file.
 ## [1.5.0] - 2025-09-25
 ### Added
 - Lazy Prompt (ext).
+
+## [1.5.5] - 2025-09-25
+### Added
+- "Unified Loader", DIFFUSION_MODEL output fix and Class name.
