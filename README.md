@@ -127,18 +127,22 @@ Minimal nodes that **save** images in an `IMAGE` batch to ComfyUI’s output dir
 * Defaults at runtime: `history_path = custom_nodes\prompt_history.json`, `max_entries = 500`.
 * You can adjust **history path** and **max entries** from the node’s **context menu**.
 
+
+
 ## Versioning & Updates
 
-### [1.0.0]
-#### Added
+```
+[1.0.0]
+ Added
 - Initial public release.
 - Nodes: Lazy Prompt (+mini), Unified Loader (+mini), Just Save Image (+Out).
 - Prompt history JSON + config file `PG_Lazy_Prompt_Config.json`.
 
-### [1.5.0]
-#### Added
+[1.5.0]
+ Added
 - Lazy Prompt (ext).
 
-## [1.5.5] - 2025-09-25
-### Added
-- "Unified Loader", DIFFUSION_MODEL output fix and Class name.
+[1.5.5]
+ Fix
+- Unified Loader, DIFFUSION_MODEL output fix and Class name.
+```
