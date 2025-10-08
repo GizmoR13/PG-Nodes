@@ -1,4 +1,4 @@
-VERSION = "1.5.5"
+VERSION = "2.0.0"
 __version__ = VERSION
 
 import importlib
@@ -28,5 +28,3 @@ for info in pkgutil.iter_modules([str(pkg_path)]):
         _merge(mod)
 
 WEB_DIRECTORY = "web"
-print("[PG-nodes] loaded:",
-      ", ".join(NODE_CLASS_MAPPINGS.keys()))

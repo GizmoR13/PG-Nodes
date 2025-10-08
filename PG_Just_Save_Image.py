@@ -82,7 +82,7 @@ class PgJustSaveImage:
     RETURN_TYPES = ()
     FUNCTION = "save_if_true"
     OUTPUT_NODE = True
-    CATEGORY = "PG"
+    CATEGORY = "PG/Utils"
 
     def save_if_true(self, image, save=False, prompt=None, extra_pnginfo=None):
         if save:
@@ -106,7 +106,7 @@ class PgJustSaveImageOut:
 
     RETURN_TYPES = ("IMAGE",)
     FUNCTION = "save_and_pass"
-    CATEGORY = "PG"
+    CATEGORY = "PG/Utils"
 
     def save_and_pass(self, image, save=False, prompt=None, extra_pnginfo=None):
         if save:

@@ -1,5 +1,5 @@
 """
-ComfyUI — Unified Loader (v1.1)
+ComfyUI — Unified Loader (v1.5)
 
 What this module provides:
 - A single "Unified Loader" node that can load: Checkpoint (MODEL/CLIP/VAE), Diffusion UNet, VAE
@@ -139,11 +139,12 @@ FOLDER_KEYS = {
 }
 
 CLIP_TYPES = [
-    "stable_diffusion", "stable_cascade", "sd3", "stable_audio", "mochi",
-    "ltxv", "pixart", "cosmos", "lumina2", "wan", "hidream", "chroma",
-    "ace", "omnigen2", "qwen_image",
+    "auto",
+    "SD 1.x/2.x", "SDXL", "SD3",
+    "Stable Cascade", "FLUX", "HiDream", "Qwen Image",
+    "wan", "pixart", "lumina2", "chroma", "ace",
+    "ltxv", "cosmos", "omnigen2",
 ]
-
 
 def _list_files(key: str) -> List[str]:
     if get_filename_list is None:
@@ -159,6 +160,99 @@ def _with_none(options: List[str]) -> List[str]:
     opts = [o for o in options if o]
     return ["none"] + opts
 
+def _guess_by_filename(paths: List[str]) -> str:
+    low = " ".join([p.lower() for p in paths])
+    if "hidream" in low:
+        return "hidream"
+    if "qwen" in low:
+        return "qwen"
+    if "flux" in low:
+        return "flux"
+    if "sdxl" in low or "text_encoder_2" in low:
+        return "sdxl"
+    if "sd3" in low or "sd_3" in low or "stable_diffusion_3" in low:
+        return "sd3"
+    return "sd"
+
+
+def _guess_by_keys(path: str) -> str:
+    """Best-effort peek into a single encoder to detect family by key patterns."""
+    try:
+        if comfy_utils is None:
+            return "sd"
+        sd0 = comfy_utils.load_torch_file(path, safe_load=True)
+        if not isinstance(sd0, dict):
+            return "sd"
+        keys = list(sd0.keys())[:2000]
+        low_keys = " ".join(k.lower() for k in keys)
+        # SDXL tell-tales
+        if "text_encoder_2" in low_keys:
+            return "sdxl"
+        # SD3 tell-tales (T5/FLAN/UL2)
+        if ("t5" in low_keys) or ("flan" in low_keys) or ("ul2" in low_keys):
+            return "sd3"
+        # Flux/HiDream/Qwen: rely mostly on filenames; some packs expose distinctive prefixes
+        if "flux" in low_keys:
+            return "flux"
+        if "hidream" in low_keys:
+            return "hidream"
+        if "qwen" in low_keys:
+            return "qwen"
+    except Exception:
+        pass
+    return "sd"
+
+
+def _resolve_clip_enum(name: str):
+    """Map friendly UI label to comfy_sd.CLIPType enum (with robust fallbacks)."""
+    if comfy_sd is None:
+        return None
+
+    # normalize: lowercase + podmiana separatorów
+    n = (name or "sd").strip().lower()
+    n = n.replace("-", " ").replace("/", " ").replace(".", " ").replace("__", " ")
+    n = " ".join(n.split())  # collapse spaces
+
+    alias = {
+        "sd 1 x 2 x":          "STABLE_DIFFUSION",
+        "sd 1.x 2.x":          "STABLE_DIFFUSION",
+        "sdxl":                "STABLE_DIFFUSION_XL",
+        "sd 3":                "STABLE_DIFFUSION_3",
+        "stable cascade":      "STABLE_CASCADE",
+        "flux":                "FLUX",
+        "hidream":             "HIDREAM",
+        "qwen image":          "QWEN_IMAGE",
+
+        "sd":                  "STABLE_DIFFUSION",
+        "stable_diffusion":    "STABLE_DIFFUSION",
+        "stable diffusion":    "STABLE_DIFFUSION",
+        "stable_diffusion_xl": "STABLE_DIFFUSION_XL",
+        "stable diffusion xl": "STABLE_DIFFUSION_XL",
+        "sd3":                 "STABLE_DIFFUSION_3",
+        "stable_diffusion_3":  "STABLE_DIFFUSION_3",
+        "stable diffusion 3":  "STABLE_DIFFUSION_3",
+        "qwen":                "QWEN",
+        "qwen_image":          "QWEN_IMAGE",
+        "stable_cascade":      "STABLE_CASCADE",
+        "stable cascade ":     "STABLE_CASCADE",
+        "stable_audio":        "STABLE_AUDIO",
+
+        "wan":                 "WAN",
+        "pixart":              "PIXART",
+        "lumina2":             "LUMINA2",
+        "chroma":              "CHROMA",
+        "ace":                 "ACE",
+        "ltxv":                "LTXV",
+        "cosmos":              "COSMOS",
+        "omnigen2":            "OMNIGEN2",
+    }
+
+    enum_name = alias.get(n)
+    if enum_name is None:
+        enum_name = n.upper()
+
+    return getattr(comfy_sd.CLIPType, enum_name, getattr(comfy_sd.CLIPType, "STABLE_DIFFUSION", None))
+    
 
 # --------------------------------------------------------------------------------------
 # Main node (all internal loaders)
@@ -195,15 +289,54 @@ class PgUnifiedLoader:
             return (None,)
         if get_full_path_or_raise is None or comfy_sd is None or get_folder_paths is None:
             return (None,)
-        clip_type = getattr(comfy_sd.CLIPType, type.upper(), getattr(comfy_sd.CLIPType, "STABLE_DIFFUSION", None))
+
         model_options = {}
         if device == "cpu" and torch is not None:
             model_options["load_device"] = model_options["offload_device"] = torch.device("cpu")
-        ckpt_paths = [get_full_path_or_raise("text_encoders", n) for n in names]
+
+        try:
+            ckpt_paths = [get_full_path_or_raise("text_encoders", n) for n in names]
+        except Exception:
+            return (None,)
+
+        # AUTO detection for requested families
+        req = (type or "sd").lower().strip()
+        if req == "auto":
+            # Heuristics priority:
+            # 1) 4+ encoders → HiDream (wymaga 4 plików)
+            # 2) 2–3 encodery → SDXL (TE1+TE2)
+            # 3) filename hints → hidream/flux/qwen/sdxl/sd3
+            # 4) key sniff → sdxl/sd3 (t5/flan/ul2)
+            if len(ckpt_paths) >= 4:
+                family = "hidream"
+            elif len(ckpt_paths) >= 2:
+                family = "sdxl"
+            else:
+                family = _guess_by_filename(ckpt_paths)
+                if family == "sd":
+                    family = _guess_by_keys(ckpt_paths[0])
+        else:
+            # Normalize explicit aliases
+            aliases = {
+                "sd1": "sd", "sd2": "sd", "sd 1": "sd", "sd 2": "sd", "sd 1/2x": "sd",
+                "stable_diffusion": "sd",
+                "stable_diffusion_xl": "sdxl", "sdxl": "sdxl",
+                "stable_diffusion_3": "sd3", "sd3": "sd3",
+            }
+            family = aliases.get(req, req)
+
+        ct_enum = _resolve_clip_enum(family)
+
+        # Optional: print decision for debugging
+        try:
+            print(f"[UnifiedLoader] _load_clip: type='{type}' → family='{family}', enum='{ct_enum}'")
+        except Exception:
+            pass
+
         clip = comfy_sd.load_clip(
             ckpt_paths=ckpt_paths,
             embedding_directory=get_folder_paths("embeddings"),
-            clip_type=clip_type,
+            clip_type=ct_enum,
             model_options=model_options,
         )
         return (clip,)
@@ -596,11 +729,13 @@ class PgUnifiedLoader:
                     pass
 
         return (controlnet,)
+        
 
     @classmethod
     def INPUT_TYPES(cls):
         lists = {label: _with_none(_list_files(FOLDER_KEYS[label])) for label in TYPE_LABELS}
         ipadapter_list = _with_none(_list_files("ipadapter"))
+
         return {
             "required": {
                 # Global device toggle (used by internal loaders)
@@ -613,6 +748,7 @@ class PgUnifiedLoader:
                 "clip_1": (lists["Load CLIP"], {"default": "none", "label": "CLIP_1"}),
                 "clip_2": (lists["Load CLIP"], {"default": "none", "label": "CLIP_2"}),
                 "clip_3": (lists["Load CLIP"], {"default": "none", "label": "CLIP_3"}),
+                "clip_4": (lists["Load CLIP"], {"default": "none", "label": "CLIP_4"}),
                 "clip_vision": (lists["Load CLIP Vision"], {"default": "none", "label": "CLIP Vision"}),
                 "controlnet": (lists["Load ControlNet Model"], {"default": "none", "label": "ControlNet"}),
                 "ipadapter": (ipadapter_list, {"default": "none", "label": "IPAdapter"}),
@@ -631,13 +767,13 @@ class PgUnifiedLoader:
                     ["default", "fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2"],
                     {"default": "default", "label": "Diffusion_type"},
                 ),
-                "clip_type": (CLIP_TYPES, {"default": "stable_diffusion", "label": "Clip_type"}),
+                "clip_type": (CLIP_TYPES, {"default": "auto", "label": "Clip_type"}),
             }
         }
 
     # IPADAPTER precedes UPSCALE_MODEL in the tuple
-    RETURN_TYPES = ("MODEL", "CLIP", "VAE", "MODEL", "CLIP", "VAE", "CLIP_VISION", "CONTROL_NET", "IPADAPTER", "UPSCALE_MODEL")
-    RETURN_NAMES = ("CP_MODEL", "CP_CLIP", "CP_VAE", "DIFFUSION_MODEL", "CLIP", "VAE", "CLIP_VISION", "CONTROLNET", "IPADAPTER", "UPSCALE_MODEL")
+    RETURN_TYPES = ("MODEL", "CLIP", "VAE", "CLIP_VISION", "CONTROL_NET", "IPADAPTER", "UPSCALE_MODEL")
+    RETURN_NAMES = ("MODEL", "CLIP", "VAE", "CLIP_VISION", "CONTROLNET", "IPADAPTER", "UPSCALE_MODEL")
     FUNCTION = "run"
 
     @classmethod
@@ -652,6 +788,7 @@ class PgUnifiedLoader:
             clip_1: str,
             clip_2: str,
             clip_3: str,
+            clip_4: str,
             clip_vision: str,
             controlnet: str,
             ipadapter: str,
@@ -660,24 +797,24 @@ class PgUnifiedLoader:
             clip_type: str,
             diffusion_type: str,
             ):
-        CP_MODEL = CP_CLIP = CP_VAE = DIFFUSION_MODEL = CLIP = VAE = CLIP_VISION = CONTROLNET = IPADAPTER = UPSCALE_MODEL = None
+        MODEL = CLIP = VAE = CLIP_VISION = CONTROLNET = IPADAPTER = UPSCALE_MODEL = None
 
         device = "cpu" if device_cpu else "default"
 
-        # Checkpoint → CP_MODEL/CP_CLIP/CP_VAE
+        # Checkpoint → MODEL/CLIP/VAE
         if checkpoint and checkpoint != "none":
             try:
                 m, c, v = self._load_checkpoint(checkpoint, device=device)
-                CP_MODEL, CP_CLIP, CP_VAE = m, c, v
+                MODEL, CLIP, VAE = m, c, v
             except Exception as e:
                 print(f"[Unified Loader] checkpoint load error: {e}")
 
         # CLIP (dual/triple) → CLIP
-        if (clip_1 and clip_1 != "none") or (clip_2 and clip_2 != "none") or (clip_3 and clip_3 != "none"):
+        if (clip_1 and clip_1 != "none") or (clip_2 and clip_2 != "none") or (clip_3 and clip_3 != "none") or (clip_4 and clip_4 != "none"):
             try:
                 (c2,) = self._load_clip(
-                    clip_names=[clip_1, clip_2, clip_3],
-                    type=clip_type or "stable_diffusion",
+                    clip_names=[clip_1, clip_2, clip_3, clip_4],
+                    type=clip_type or "auto",
                     device=device,
                 )
                 CLIP = c2
@@ -692,11 +829,11 @@ class PgUnifiedLoader:
             except Exception as e:
                 print(f"[Unified Loader] vae load error: {e}")
 
-        # UNet (Diffusion) → DIFFUSION_MODEL
+        # UNet (Diffusion) → MODEL
         if diffusion and diffusion != "none":
             try:
                 (dm,) = self._load_unet(unet_name=diffusion, weight_dtype=diffusion_type, device=device)
-                DIFFUSION_MODEL = dm
+                MODEL = dm
             except Exception as e:
                 print(f"[Unified Loader] unet load error: {e}")
 
@@ -731,8 +868,8 @@ class PgUnifiedLoader:
                 UPSCALE_MODEL = um
             except Exception as e:
                 print(f"[Unified Loader] upscale load error: {e}")
-
-        return (CP_MODEL, CP_CLIP, CP_VAE, DIFFUSION_MODEL, CLIP, VAE, CLIP_VISION, CONTROLNET, IPADAPTER, UPSCALE_MODEL)
+        
+        return (MODEL, CLIP, VAE, CLIP_VISION, CONTROLNET, IPADAPTER, UPSCALE_MODEL)
 
 
 # --- MINI NODE ----------------------------------------------------------------------------------
@@ -757,7 +894,7 @@ class PgUnifiedLoaderMini:
         }
 
     RETURN_TYPES = ("MODEL", "CLIP", "VAE", "CONTROL_NET", "IPADAPTER", "UPSCALE_MODEL", "CLIP_VISION")
-    RETURN_NAMES = ("CP_MODEL", "CP_CLIP", "CP_VAE", "CONTROLNET", "IPADAPTER", "UPSCALE_MODEL", "CLIP_VISION")
+    RETURN_NAMES = ("MODEL", "CLIP", "VAE", "CONTROLNET", "IPADAPTER", "UPSCALE_MODEL", "CLIP_VISION")
     FUNCTION = "run"
 
     @classmethod
@@ -772,14 +909,14 @@ class PgUnifiedLoaderMini:
             ipadapter: str,
             upscale: str,
             ):
-        CP_MODEL = CP_CLIP = CP_VAE = CONTROLNET = IPADAPTER = UPSCALE_MODEL = CLIP_VISION = None
+        MODEL = CLIP = VAE = CONTROLNET = IPADAPTER = UPSCALE_MODEL = CLIP_VISION = None
         device = "cpu" if device_cpu else "default"
 
-        # Checkpoint → CP_MODEL/CP_CLIP/CP_VAE
+        # Checkpoint → MODEL/CLIP/VAE
         if checkpoint and checkpoint != "none":
             try:
                 m, c, v = PgUnifiedLoader._load_checkpoint(ckpt_name=checkpoint, device=device)
-                CP_MODEL, CP_CLIP, CP_VAE = m, c, v
+                MODEL, CLIP, VAE = m, c, v
             except Exception as e:
                 print(f"[Unified Loader (mini)] checkpoint load error: {e}")
 
@@ -815,7 +952,7 @@ class PgUnifiedLoaderMini:
             except Exception as e:
                 print(f"[Unified Loader (mini)] upscale load error: {e}")
 
-        return (CP_MODEL, CP_CLIP, CP_VAE, CONTROLNET, IPADAPTER, UPSCALE_MODEL, CLIP_VISION)
+        return (MODEL, CLIP, VAE, CONTROLNET, IPADAPTER, UPSCALE_MODEL, CLIP_VISION)
 
 
 # Node registry -----------------------------------------------------------------------------------

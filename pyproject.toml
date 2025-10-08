@@ -1,6 +1,6 @@
 [project]
 name = "PG-nodes"
-version = "1.5.5"
+version = "2.0.0"
 description = "PG Nodes for ComfyUI"
 requires-python = ">=3.10"
 
