@@ -343,7 +343,7 @@ app.registerExtension({
 			})
 		);
 
-		SetNode_mod.category = "PG";
+		SetNode_mod.category = "KJNodes";
 	},
 });
 
@@ -531,6 +531,6 @@ app.registerExtension({
 			})
 		);
 
-		GetNode_mod.category = "PG";
+		GetNode_mod.category = "KJNodes";
 	},
 });
