@@ -101,7 +101,7 @@ The core idea of **Lazy Prompt** is comfort: write a prompt once, and bring it b
 
 ---
 
-## LoRA, Bridge & Hooks
+## Lora Bridge and Hooks
 
 ![lora1 pic](./examples/lora1.png)
 
