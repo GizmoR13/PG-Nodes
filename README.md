@@ -14,7 +14,7 @@ Table of Contents
   - [SD-Master, SD3-Master, FLUX-Master](#workflows)
 - [**Nodes**](#nodes)
   - [Lazy Prompt](#lazy-prompt)
-  - [LoRA, Bridge & Hooks](#lora,-bridge-&-hooks)
+  - [LoRA, Bridge & Hooks](#lora-bridge-and-hooks)
   - [Unified Loader](#unified-loader)
   - [Swap CFG Guidance](#swap-cfg-guidance)
   - [Select Nodes](#select-nodes)
@@ -53,7 +53,7 @@ After installing PG Nodes, the workflows are available under Templates → PG-No
 
 ## *Nodes*
   * [Lazy Prompt](#lazy-prompt)
-  * [LoRA, Bridge & Hooks](#lora,-bridge-&-hooks)
+  * [LoRA, Bridge & Hooks](#lora-bridge-and-hooks)
   * [Unified Loader](#unified-loader)
   * [Swap CFG Guidance](#swap-cfg-guidance)
   * [Select Nodes](#select-nodes)
@@ -61,7 +61,7 @@ After installing PG Nodes, the workflows are available under Templates → PG-No
   * [Checkpoint Switch](#checkpoint-switch)
   * [XOR Toggle](#xor-toggle)
   * [Percent](#percent)
-### [Installation](#installation)
+* [**Installation**](#installation)
 
 ## Lazy Prompt
 
