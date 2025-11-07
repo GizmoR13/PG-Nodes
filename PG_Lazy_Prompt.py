@@ -982,6 +982,8 @@ def _history_list_items(history_path: str, max_entries: int, as_objects: bool = 
                     "key_hash": kh,
                     "label_short": label,
                     "custom_name": custom_name,
+                    "positive": pos,
+                    "negative": neg,
                     "created_at": int(e.get("created_at", 0) or 0),
                     "last_used_at": int(e.get("last_used_at", 0) or 0),
                     "hits": int(e.get("hits", 0) or 0),

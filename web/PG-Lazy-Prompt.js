@@ -116,9 +116,9 @@ import { app } from "../../scripts/app.js";
   function get(node, key, def){ var w=findWidget(node,key); return (w&&typeof w.value!=='undefined')?w.value:def; }
   const PG_LAZY_NAMES = new Set([
     // class names
-    'PgLazyPrompt', 'PgLazyPromptMini', 'PgLazyPromptExt',
+    'PgLazyPrompt', 'PgLazyPromptMini', 'PgLazyPromptExt', 'PgPromptSimple',
     // display titles as they appear in ComfyUI UI
-    'Lazy Prompt', 'Lazy Prompt (mini)', 'Lazy Prompt (ext)',
+    'Lazy Prompt', 'Lazy Prompt (mini)', 'Lazy Prompt (ext)', 'Simple Prompt',
   ]);
   function _norm(x){
     return (x == null ? '' : String(x));
@@ -488,6 +488,9 @@ import { app } from "../../scripts/app.js";
       var l = String(labelOf(it)).toLowerCase();
       if (l.includes(q)) return true;
       try {
+        // Check positive and negative prompt content
+        if (it && it.positive && String(it.positive).toLowerCase().includes(q)) return true;
+        if (it && it.negative && String(it.negative).toLowerCase().includes(q)) return true;
         if (it && it.lens && String(it.lens).toLowerCase().includes(q)) return true;
         if (it && it.time_of_day && String(it.time_of_day).toLowerCase().includes(q)) return true;
         if (it && it.light_from && String(it.light_from).toLowerCase().includes(q)) return true;
@@ -784,9 +787,9 @@ import { app } from "../../scripts/app.js";
 
   const PG_LAZY_NAMES = new Set([
     // class names
-    'PgLazyPrompt', 'PgLazyPromptMini', 'PgLazyPromptExt',
+    'PgLazyPrompt', 'PgLazyPromptMini', 'PgLazyPromptExt', 'PgPromptSimple',
     // display titles as they appear in ComfyUI UI
-    'Lazy Prompt', 'Lazy Prompt (mini)', 'Lazy Prompt (ext)',
+    'Lazy Prompt', 'Lazy Prompt (mini)', 'Lazy Prompt (ext)', 'Simple Prompt',
   ]);
   function _norm(x){
     return (x == null ? '' : String(x));
