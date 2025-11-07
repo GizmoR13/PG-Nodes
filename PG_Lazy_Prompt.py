@@ -20,6 +20,14 @@ from typing import Any, Dict, List, Tuple
 from typing import Tuple as _T_Tuple, Optional as _T_Optional
 import random as _rnd
 
+# Try to import rapidfuzz for smart fuzzy search
+try:
+    from rapidfuzz import fuzz
+    _HAS_RAPIDFUZZ = True
+except ImportError:
+    _HAS_RAPIDFUZZ = False
+    fuzz = None
+
 # --- ComfyUI & server imports (optional; tolerate absence during static checks) -----------------
 try:
     import nodes
@@ -853,17 +861,59 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 
 # === API helpers =================================================================================
 
-def _fuzzy_match(query: str, text: str) -> bool:
-    """Simple fuzzy matching: all chars in query appear in text (case-insensitive, in order)."""
+def _search_score(query: str, text: str) -> float:
+    """
+    Smart fuzzy search with multi-term matching and optional typo tolerance.
+
+    Returns a score 0-100:
+    - 0 = no match
+    - 100 = perfect match
+    - Uses rapidfuzz if available for typo tolerance, otherwise falls back to substring matching
+    """
     if not query or not text:
-        return True
-    query_lower = query.lower()
+        return 100.0
+
+    query_lower = query.lower().strip()
     text_lower = text.lower()
-    q_idx = 0
-    for char in text_lower:
-        if q_idx < len(query_lower) and char == query_lower[q_idx]:
-            q_idx += 1
-    return q_idx == len(query_lower)
+
+    # Split query into terms
+    terms = query_lower.split()
+    if not terms:
+        return 100.0
+
+    # If only one term, use fuzzy matching
+    if len(terms) == 1:
+        if _HAS_RAPIDFUZZ and fuzz:
+            # Use rapidfuzz for typo tolerance (token_sort_ratio for better matching)
+            return float(fuzz.token_sort_ratio(query_lower, text_lower))
+        else:
+            # Fallback: simple substring match
+            if query_lower in text_lower:
+                return 100.0
+            # Try partial word match (at least 80% similarity)
+            match_count = sum(1 for char_idx, char in enumerate(text_lower)
+                            if char_idx < len(text_lower) and char == query_lower[0])
+            return 60.0 if match_count > 0 else 0.0
+
+    # Multi-term matching: all terms must be present
+    # Check if all terms exist in text (with typo tolerance if available)
+    term_scores = []
+    for term in terms:
+        if _HAS_RAPIDFUZZ and fuzz:
+            # Fuzzy match with typo tolerance (threshold 70%)
+            score = float(fuzz.partial_ratio(term, text_lower))
+        else:
+            # Fallback: simple substring match
+            score = 100.0 if term in text_lower else 0.0
+        term_scores.append(score)
+
+    # All terms must match (minimum 70% if using fuzzy)
+    min_threshold = 70.0 if _HAS_RAPIDFUZZ else 1.0
+    if all(score >= min_threshold for score in term_scores):
+        # Return average score of all term matches
+        return sum(term_scores) / len(term_scores)
+    else:
+        return 0.0
 
 
 def _make_history_record(key_hash: str, positive: str, negative: str, now: int, old_entry: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -918,8 +968,7 @@ def _history_list_items(history_path: str, max_entries: int, as_objects: bool = 
         hp = _normalize_history_path(history_path or "prompt_history.json")
         hist = _read_history(hp)
         items = hist.get("items", [])
-        out_strings: list[str] = []
-        out_objects: list[dict] = []
+        scored_items: list[tuple[float, dict, str, str]] = []  # (score, item, label, key_hash)
 
         import time as _t
         MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
@@ -945,10 +994,19 @@ def _history_list_items(history_path: str, max_entries: int, as_objects: bool = 
             neg = (e.get("negative") or "").strip()
             custom_name = (e.get("custom_name") or "").strip()
 
-            # Apply search filter (fuzzy match across custom_name, positive, negative)
+            # Calculate search score (custom_name weighted higher, then pos, then neg)
+            score = 100.0  # Default: no search, show all
             if search_query:
-                search_target = f"{custom_name} {pos} {neg}".lower()
-                if not _fuzzy_match(search_query, search_target):
+                # Score each field and take the best match
+                custom_name_score = _search_score(search_query, custom_name) if custom_name else 0.0
+                pos_score = _search_score(search_query, pos) if pos else 0.0
+                neg_score = _search_score(search_query, neg) if neg else 0.0
+
+                # Weight: custom_name > positive > negative
+                score = max(custom_name_score * 1.2, pos_score, neg_score)
+
+                # Skip if score is too low (no match)
+                if score < 50.0:
                     continue
 
             pos_display = pos.replace("\n", " ")
@@ -977,6 +1035,19 @@ def _history_list_items(history_path: str, max_entries: int, as_objects: bool = 
             if not label:
                 continue
 
+            scored_items.append((score, e, label, kh))
+
+        # Sort by score (descending), then by last_used_at for ties
+        scored_items.sort(key=lambda x: (-x[0], -int(x[1].get("last_used_at", 0) or 0)))
+
+        out_strings: list[str] = []
+        out_objects: list[dict] = []
+
+        for score, e, label, kh in scored_items:
+            custom_name = (e.get("custom_name") or "").strip()
+            pos = (e.get("positive") or "").strip()
+            neg = (e.get("negative") or "").strip()
+
             if as_objects:
                 out_objects.append({
                     "key_hash": kh,
@@ -984,6 +1055,7 @@ def _history_list_items(history_path: str, max_entries: int, as_objects: bool = 
                     "custom_name": custom_name,
                     "positive": pos,
                     "negative": neg,
+                    "search_score": round(score, 2),
                     "created_at": int(e.get("created_at", 0) or 0),
                     "last_used_at": int(e.get("last_used_at", 0) or 0),
                     "hits": int(e.get("hits", 0) or 0),
