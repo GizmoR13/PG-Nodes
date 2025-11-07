@@ -305,12 +305,15 @@ import { app } from "../../scripts/app.js";
     }catch(_){ return Array.isArray(items) ? items : []; }
   }
   // --- 1) apiList: your async style, with `objects:true`
-  async function apiList(node){
+  async function apiList(node, searchQuery){
     const body = {
       history_path: getHistoryPath(node),
       max_entries:  getMaxEntries(node),
       objects: true,
     };
+    if (searchQuery) {
+      body.search_query = String(searchQuery).trim();
+    }
     const r = await fetch('/pg/history/list', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -331,6 +334,21 @@ import { app } from "../../scripts/app.js";
     var j = await r.json().catch(function () { return null; });
     if (!(r.ok && j && j.ok)) throw new Error((j && j.message) || ('HTTP ' + r.status));
     return (j.preview_text || '');
+  }
+  async function apiRename(node, sel, customName) {
+    var body = {
+      history_path: getHistoryPath(node),
+      history_select: sel,
+      custom_name: String(customName || '').trim()
+    };
+    var r = await fetch('/pg/history/rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    var j = await r.json().catch(function () { return null; });
+    if (!(r.ok && j && j.ok)) throw new Error((j && j.message) || ('HTTP ' + r.status));
+    return (j.custom_name || '');
   }
   // Helper: refresh list and preview
   function runRefresh(node){
@@ -486,7 +504,13 @@ import { app } from "../../scripts/app.js";
         listEl.innerHTML = '';
       }
       var q = filter.value.trim();
-      var filtered = allItems.filter(function(it){ return matchItem(it, q); });
+      // Use server-side search if query is provided
+      if (q && allItems.length > 0) {
+        // Client-side fallback for filtering (server already filtered if search_query was sent)
+        var filtered = allItems.filter(function(it){ return matchItem(it, q); });
+      } else {
+        var filtered = allItems;
+      }
       if (!filtered.length){
         var empty = document.createElement('div');
         empty.className = 'pg-hist-empty';
@@ -511,6 +535,29 @@ import { app } from "../../scripts/app.js";
             status.textContent = 'Error: ' + ((e && e.message) || String(e));
           });
         };
+        // Right-click context menu for rename
+        row.oncontextmenu = function(ev){
+          ev.preventDefault();
+          ev.stopPropagation();
+          var currentName = (it && it.custom_name) || '';
+          var newName = prompt('Rename entry:', currentName);
+          if (newName !== null) {
+            status.textContent = 'Renaming…';
+            apiRename(node, kh, newName).then(function(){
+              status.textContent = 'Renamed! Refreshing…';
+              setTimeout(function(){
+                apiList(node, q).then(function(items){
+                  allItems = Array.isArray(items) ? items : [];
+                  renderList();
+                }).catch(function(e){
+                  status.textContent = 'Error: ' + ((e && e.message) || String(e));
+                });
+              }, 300);
+            }).catch(function(e){
+              status.textContent = 'Rename failed: ' + ((e && e.message) || String(e));
+            });
+          }
+        };
         listEl.appendChild(row);
       });
     }
@@ -518,7 +565,24 @@ import { app } from "../../scripts/app.js";
     // interactions
     function escHandler(ev){ if (ev.key === 'Escape'){ destroy(); } }
     document.addEventListener('keydown', escHandler);
-    filter.addEventListener('input', renderList);
+
+    // Filter input: send search query to server and re-render
+    var filterTimeout = null;
+    filter.addEventListener('input', function(){
+      clearTimeout(filterTimeout);
+      filterTimeout = setTimeout(function(){
+        var q = filter.value.trim();
+        status.textContent = 'Searching…';
+        apiList(node, q).then(function(items){
+          allItems = Array.isArray(items) ? items : [];
+          renderList();
+          try { status.style.display = 'none'; } catch(_){ }
+        }).catch(function(e){
+          status.textContent = 'Search error: ' + ((e && e.message) || String(e));
+        });
+      }, 250);
+    });
+
     filter.addEventListener('keydown', function(ev){ if (ev.key === 'Escape'){ ev.stopPropagation(); destroy(); } });
 
     // load data

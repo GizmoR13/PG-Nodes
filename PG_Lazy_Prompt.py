@@ -622,24 +622,15 @@ class PgLazyPromptMini:
             core = {"positive": positive_orig, "negative": negative_raw}
             key_hash = _compute_key_hash(core)
             now = int(time.time())
-            record = {
-                "key_hash": key_hash,
-                "positive": core["positive"],
-                "negative": core["negative"],
-                "created_at": now,
-                "last_used_at": now,
-                "hits": 1,
-            }
+
             with _HIST_LOCK:
                 hist = _read_history(history_path)
                 items = hist.get("items", [])
                 before_len = len(items)
                 ix = _find_by_hash(items, key_hash)
-                if ix >= 0:
-                    old = items.pop(ix)
-                    record["created_at"] = int(old.get("created_at", now))
-                    record["hits"] = int(old.get("hits", 0)) + 1
+                old_entry = items.pop(ix) if ix >= 0 else None
 
+                record = _make_history_record(key_hash, positive_orig, negative_raw, now, old_entry)
                 items.insert(0, record)
                 items = _trim_lru(items, max_entries)
                 print(f"[PG history mini] save: before={before_len} after={len(items)} max_entries={max_entries}")
@@ -723,7 +714,7 @@ class PgLazyPromptExt:
 
         # History write (skip if both empty)
         if (positive_orig == "" and negative_raw == ""):
-            print("[PG history] skip: empty positive & negative; not saving (mini)")
+            print("[PG history] skip: empty positive & negative; not saving (ext)")
         else:
             _hp, _me = _get_prefs()
             history_path = _normalize_history_path(_hp)
@@ -732,27 +723,18 @@ class PgLazyPromptExt:
             core = {"positive": positive_orig, "negative": negative_raw}
             key_hash = _compute_key_hash(core)
             now = int(time.time())
-            record = {
-                "key_hash": key_hash,
-                "positive": core["positive"],
-                "negative": core["negative"],
-                "created_at": now,
-                "last_used_at": now,
-                "hits": 1,
-            }
+
             with _HIST_LOCK:
                 hist = _read_history(history_path)
                 items = hist.get("items", [])
                 before_len = len(items)
                 ix = _find_by_hash(items, key_hash)
-                if ix >= 0:
-                    old = items.pop(ix)
-                    record["created_at"] = int(old.get("created_at", now))
-                    record["hits"] = int(old.get("hits", 0)) + 1
+                old_entry = items.pop(ix) if ix >= 0 else None
 
+                record = _make_history_record(key_hash, positive_orig, negative_raw, now, old_entry)
                 items.insert(0, record)
                 items = _trim_lru(items, max_entries)
-                print(f"[PG history mini] save: before={before_len} after={len(items)} max_entries={max_entries}")
+                print(f"[PG history ext] save: before={before_len} after={len(items)} max_entries={max_entries}")
 
                 hist["items"] = items
                 _write_history_atomic(history_path, hist)
@@ -762,19 +744,146 @@ class PgLazyPromptExt:
         return (pos_cond, neg_cond, pos_raw_text, neg_raw_text)
 
 
+class PgPromptSimple:
+    DESCRIPTION = "Simple prompt node (no CLIP) - outputs strings with on-disk JSON history."
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "positive": ("STRING", {"multiline": True, "default": ""}),
+                "negative": ("STRING", {"multiline": True, "default": ""}),
+            },
+            "optional": {}
+        }
+
+    RETURN_TYPES  = ("STRING", "STRING")
+    RETURN_NAMES  = ("positive", "negative")
+    FUNCTION      = "execute_and_history"
+    CATEGORY      = "PG"
+    OUTPUT_NODE   = True
+
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        if not PG_ALWAYS_REROLL:
+            return None
+        try:
+            positive_val = kwargs.get('positive', '')
+        except Exception:
+            positive_val = ''
+        if has_choice_syntax(positive_val):
+            try:
+                return time.time_ns()
+            except Exception:
+                return time.time()
+        return None
+
+    def execute_and_history(
+        self,
+        positive,
+        negative,
+        history_ui_slot: str = "",
+    ):
+        _ = history_ui_slot
+
+        positive_orig = (positive or "").strip()
+        negative_raw  = (negative or "").strip()
+
+        # Reroll seed if enabled (env `PG_REROLL` overrides)
+        _reroll = bool(PG_ALWAYS_REROLL)
+        try:
+            if "PG_REROLL" in os.environ:
+                _reroll = bool(int(os.environ.get("PG_REROLL", "0")))
+        except Exception:
+            pass
+        _seed = None
+        if _reroll:
+            try:
+                _seed = time.time_ns() & 0xFFFFFFFF
+            except Exception:
+                _seed = int(time.time()*1000) & 0xFFFFFFFF
+        positive_raw = expand_choices(positive_orig, seed=_seed)
+
+        pos_text = positive_raw
+        neg_text = negative_raw
+
+        # History write (skip if both empty)
+        if (positive_orig == "" and negative_raw == ""):
+            print("[PG history] skip: empty positive & negative; not saving (simple)")
+        else:
+            _hp, _me = _get_prefs()
+            history_path = _normalize_history_path(_hp)
+            max_entries = int(_me)
+
+            core = {"positive": positive_orig, "negative": negative_raw}
+            key_hash = _compute_key_hash(core)
+            now = int(time.time())
+
+            with _HIST_LOCK:
+                hist = _read_history(history_path)
+                items = hist.get("items", [])
+                before_len = len(items)
+                ix = _find_by_hash(items, key_hash)
+                old_entry = items.pop(ix) if ix >= 0 else None
+
+                record = _make_history_record(key_hash, positive_orig, negative_raw, now, old_entry)
+                items.insert(0, record)
+                items = _trim_lru(items, max_entries)
+                print(f"[PG history simple] save: before={before_len} after={len(items)} max_entries={max_entries}")
+
+                hist["items"] = items
+                _write_history_atomic(history_path, hist)
+
+        return (pos_text, neg_text)
+
+
 NODE_CLASS_MAPPINGS = {
     "PgLazyPrompt": PgLazyPrompt,
     "PgLazyPromptMini": PgLazyPromptMini,
     "PgLazyPromptExt": PgLazyPromptExt,
+    "PgPromptSimple": PgPromptSimple,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "PgLazyPrompt": "Lazy Prompt",
     "PgLazyPromptMini": "Lazy Prompt (mini)",
     "PgLazyPromptExt": "Lazy Prompt (ext)",
+    "PgPromptSimple": "Simple Prompt",
 }
 
 
 # === API helpers =================================================================================
+
+def _fuzzy_match(query: str, text: str) -> bool:
+    """Simple fuzzy matching: all chars in query appear in text (case-insensitive, in order)."""
+    if not query or not text:
+        return True
+    query_lower = query.lower()
+    text_lower = text.lower()
+    q_idx = 0
+    for char in text_lower:
+        if q_idx < len(query_lower) and char == query_lower[q_idx]:
+            q_idx += 1
+    return q_idx == len(query_lower)
+
+
+def _make_history_record(key_hash: str, positive: str, negative: str, now: int, old_entry: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Create a history record, preserving custom_name and created_at from old entry if it exists."""
+    record = {
+        "key_hash": key_hash,
+        "positive": positive,
+        "negative": negative,
+        "created_at": now,
+        "last_used_at": now,
+        "hits": 1,
+    }
+    if old_entry:
+        record["created_at"] = int(old_entry.get("created_at", now))
+        record["hits"] = int(old_entry.get("hits", 0)) + 1
+        # Preserve custom_name if it exists
+        if "custom_name" in old_entry and old_entry.get("custom_name"):
+            record["custom_name"] = old_entry.get("custom_name")
+    return record
+
 
 def _history_preview_payload(history_path: str, history_select: str):
     try:
@@ -804,7 +913,7 @@ def _history_preview_payload(history_path: str, history_select: str):
         return False, {"error": "exception", "message": str(e)}
 
 
-def _history_list_items(history_path: str, max_entries: int, as_objects: bool = False):
+def _history_list_items(history_path: str, max_entries: int, as_objects: bool = False, search_query: str = ""):
     try:
         hp = _normalize_history_path(history_path or "prompt_history.json")
         hist = _read_history(hp)
@@ -832,12 +941,26 @@ def _history_list_items(history_path: str, max_entries: int, as_objects: bool = 
 
         for e in items[: int(max_entries)]:
             kh  = (e.get("key_hash") or "").strip()
-            pos = (e.get("positive") or "").strip().replace("\n", " ")
-            neg = (e.get("negative") or "").strip().replace("\n", " ")
+            pos = (e.get("positive") or "").strip()
+            neg = (e.get("negative") or "").strip()
+            custom_name = (e.get("custom_name") or "").strip()
 
-            text = pos if pos else (("negative: " + neg) if neg else "")
-            if len(text) > 60:
-                text = text[:60] + "…"
+            # Apply search filter (fuzzy match across custom_name, positive, negative)
+            if search_query:
+                search_target = f"{custom_name} {pos} {neg}".lower()
+                if not _fuzzy_match(search_query, search_target):
+                    continue
+
+            pos_display = pos.replace("\n", " ")
+            neg_display = neg.replace("\n", " ")
+
+            # Display logic: use custom_name if available, else content snippet
+            if custom_name:
+                text = custom_name
+            else:
+                text = pos_display if pos_display else (("negative: " + neg_display) if neg_display else "")
+                if len(text) > 60:
+                    text = text[:60] + "…"
 
             ts = e.get("last_used_at") or e.get("created_at") or 0
             date_s = _fmt(ts)
@@ -858,6 +981,7 @@ def _history_list_items(history_path: str, max_entries: int, as_objects: bool = 
                 out_objects.append({
                     "key_hash": kh,
                     "label_short": label,
+                    "custom_name": custom_name,
                     "created_at": int(e.get("created_at", 0) or 0),
                     "last_used_at": int(e.get("last_used_at", 0) or 0),
                     "hits": int(e.get("hits", 0) or 0),
@@ -893,7 +1017,8 @@ if PromptServer is not None and web is not None:
                 max_entries = int(_me)
 
             as_objects = bool(data.get("objects"))
-            ok, res = _history_list_items(history_path, max_entries, as_objects=as_objects)
+            search_query = str(data.get("search_query", "")).strip() if "search_query" in data else ""
+            ok, res = _history_list_items(history_path, max_entries, as_objects=as_objects, search_query=search_query)
             if ok:
                 return web.json_response({"ok": True, "items": res})
             return web.json_response({"ok": False, "error": res})
@@ -940,6 +1065,49 @@ if PromptServer is not None and web is not None:
                         pass
                 snap = dict(_RUNTIME_PREFS)
             return web.json_response({"ok": True, **snap, "updated": updated})
+
+        @routes.post("/pg/history/rename")
+        async def pg_history_rename(request):
+            try:
+                data = await request.json()
+            except Exception:
+                data = {}
+            _hp, _me = _get_prefs()
+            history_path = data.get("history_path", _hp)
+            history_select = data.get("history_select", "")
+            custom_name = data.get("custom_name", "").strip()
+
+            if not isinstance(history_path, (str, bytes, bytearray)):
+                history_path = str(history_path)
+
+            try:
+                hp = _normalize_history_path(history_path or "prompt_history.json")
+                kh_pref = _parse_kh_prefix(history_select)
+
+                if not kh_pref:
+                    return web.json_response({"ok": False, "error": "invalid_key_hash"})
+
+                with _HIST_LOCK:
+                    hist = _read_history(hp)
+                    items = hist.get("items", [])
+
+                    # Find entry by key_hash prefix
+                    for entry in items:
+                        kh = entry.get("key_hash", "")
+                        if kh and kh.startswith(kh_pref):
+                            if custom_name:
+                                entry["custom_name"] = custom_name
+                            else:
+                                # Remove custom_name if empty string provided
+                                entry.pop("custom_name", None)
+
+                            hist["items"] = items
+                            _write_history_atomic(hp, hist)
+                            return web.json_response({"ok": True, "custom_name": custom_name})
+
+                    return web.json_response({"ok": False, "error": "not_found"})
+            except Exception as e:
+                return web.json_response({"ok": False, "error": "exception", "message": str(e)})
 
         # set the flag *inside* this block
         setattr(PromptServer.instance, _PG_ROUTES_FLAG, True)
