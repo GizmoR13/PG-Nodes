@@ -893,19 +893,26 @@ def _search_score(query: str, text: str) -> float:
             return 0.0
 
     # Multi-term matching: all terms must be present
-    # Check if all terms exist in text (with typo tolerance if available)
+    # Split text into words and check if each query term matches any word (with fuzzy matching)
+    text_words = text_lower.split()
     term_scores = []
+
     for term in terms:
         if _HAS_RAPIDFUZZ and fuzz:
-            # Fuzzy match with typo tolerance (threshold 70%)
-            score = float(fuzz.partial_ratio(term, text_lower))
+            # Find best matching word in text for this term
+            best_score = 0.0
+            for text_word in text_words:
+                # Use token_ratio for word-level comparison
+                score = float(fuzz.token_ratio(term, text_word))
+                best_score = max(best_score, score)
+            term_scores.append(best_score)
         else:
             # Fallback: simple substring match
             score = 100.0 if term in text_lower else 0.0
-        term_scores.append(score)
+            term_scores.append(score)
 
-    # All terms must match (minimum 70% if using fuzzy)
-    min_threshold = 70.0 if _HAS_RAPIDFUZZ else 1.0
+    # All terms must match (minimum 60% for fuzzy word matching)
+    min_threshold = 60.0 if _HAS_RAPIDFUZZ else 1.0
     if all(score >= min_threshold for score in term_scores):
         # Return average score of all term matches
         return sum(term_scores) / len(term_scores)
@@ -992,12 +999,12 @@ def _history_list_items(history_path: str, max_entries: int, as_objects: bool = 
             custom_name = (e.get("custom_name") or "").strip()
 
             # Calculate search score (custom_name weighted higher, then pos, then neg)
-            score = 100.0  # Default: no search, show all
-            if search_query:
+            search_query_clean = str(search_query or "").strip()
+            if search_query_clean:
                 # Score each field and take the best match
-                custom_name_score = _search_score(search_query, custom_name) if custom_name else 0.0
-                pos_score = _search_score(search_query, pos) if pos else 0.0
-                neg_score = _search_score(search_query, neg) if neg else 0.0
+                custom_name_score = _search_score(search_query_clean, custom_name) if custom_name else 0.0
+                pos_score = _search_score(search_query_clean, pos) if pos else 0.0
+                neg_score = _search_score(search_query_clean, neg) if neg else 0.0
 
                 # Weight: custom_name > positive > negative
                 score = max(custom_name_score * 1.2, pos_score, neg_score)
@@ -1005,6 +1012,9 @@ def _history_list_items(history_path: str, max_entries: int, as_objects: bool = 
                 # Skip if score is too low (no match)
                 if score < 50.0:
                     continue
+            else:
+                # No search query: all results shown equally
+                score = 100.0
 
             pos_display = pos.replace("\n", " ")
             neg_display = neg.replace("\n", " ")
