@@ -884,16 +884,13 @@ def _search_score(query: str, text: str) -> float:
     # If only one term, use fuzzy matching
     if len(terms) == 1:
         if _HAS_RAPIDFUZZ and fuzz:
-            # Use rapidfuzz for typo tolerance (token_sort_ratio for better matching)
-            return float(fuzz.token_sort_ratio(query_lower, text_lower))
+            # Use rapidfuzz partial_ratio for keyword/substring matching with typo tolerance
+            return float(fuzz.partial_ratio(query_lower, text_lower))
         else:
             # Fallback: simple substring match
             if query_lower in text_lower:
                 return 100.0
-            # Try partial word match (at least 80% similarity)
-            match_count = sum(1 for char_idx, char in enumerate(text_lower)
-                            if char_idx < len(text_lower) and char == query_lower[0])
-            return 60.0 if match_count > 0 else 0.0
+            return 0.0
 
     # Multi-term matching: all terms must be present
     # Check if all terms exist in text (with typo tolerance if available)

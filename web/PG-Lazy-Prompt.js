@@ -524,9 +524,12 @@ import { app } from "../../scripts/app.js";
       filtered.forEach(function(it){
         var lbl = (it && (it.label_short || it)) || '';
         var kh  = (it && it.key_hash) || '';
+        var score = (it && it.search_score) || 100;
         var row = document.createElement('div');
         row.className = 'pg-hist-row';
-        row.textContent = String(lbl);
+        // Show score when searching, otherwise just label
+        var displayText = (q && score < 100) ? (lbl + ' (' + score + '%)') : lbl;
+        row.textContent = String(displayText);
         row.title = String(lbl);
         row.onclick = function(){
           status.textContent = 'Loading preview…';
