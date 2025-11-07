@@ -413,7 +413,9 @@ import { app } from "../../scripts/app.js";
       // ===== Body / List =====
       '.pg-hist-body{height:var(--pg-hist-body-maxh);overflow:auto;}',
       '.pg-hist-list{display:block;}',
-      '.pg-hist-row{padding:6px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;}',
+      '.pg-hist-row{padding:6px 10px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:8px;}',
+      '.pg-hist-row-text{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
+      '.pg-hist-row-score{flex-shrink:0;font-weight:500;color:#4db8ff;min-width:50px;text-align:right;font-size:12px;}',
       '.pg-hist-row:hover{background:var(--pg-hist-hover);}',
       '.pg-hist-empty,.pg-hist-status{padding:10px 12px;opacity:.8;}',
 
@@ -531,13 +533,24 @@ import { app } from "../../scripts/app.js";
       filtered.forEach(function(it){
         var lbl = (it && (it.label_short || it)) || '';
         var kh  = (it && it.key_hash) || '';
-        var score = (it && it.search_score) || 100;
+        var score = (it && typeof it.search_score !== 'undefined') ? it.search_score : null;
         var row = document.createElement('div');
         row.className = 'pg-hist-row';
-        // Show score when searching, otherwise just label
-        var displayText = (q && score < 100) ? (lbl + ' (' + score + '%)') : lbl;
-        row.textContent = String(displayText);
         row.title = String(lbl);
+
+        // Create text span
+        var textSpan = document.createElement('div');
+        textSpan.className = 'pg-hist-row-text';
+        textSpan.textContent = String(lbl);
+        row.appendChild(textSpan);
+
+        // Add score span if searching
+        if (q && score !== null) {
+          var scoreSpan = document.createElement('div');
+          scoreSpan.className = 'pg-hist-row-score';
+          scoreSpan.textContent = Math.round(score) + '%';
+          row.appendChild(scoreSpan);
+        }
         row.onclick = function(){
           status.textContent = 'Loading preview…';
           var sel = kh || String(lbl);
