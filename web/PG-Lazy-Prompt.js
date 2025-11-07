@@ -484,16 +484,23 @@ import { app } from "../../scripts/app.js";
     }
     function matchItem(it, q){
       if (!q) return true;
-      q = String(q).toLowerCase();
-      var l = String(labelOf(it)).toLowerCase();
-      if (l.includes(q)) return true;
+      q = String(q).toLowerCase().trim();
+      if (!q) return true;
+
+      // Split query into terms for multi-term matching
+      var terms = q.split(/\s+/);
+
+      // Build searchable text from all fields
+      var searchText = String(labelOf(it)).toLowerCase();
+      if (it && it.custom_name) searchText += ' ' + String(it.custom_name).toLowerCase();
+      if (it && it.positive) searchText += ' ' + String(it.positive).toLowerCase();
+      if (it && it.negative) searchText += ' ' + String(it.negative).toLowerCase();
+
       try {
-        // Check positive and negative prompt content
-        if (it && it.positive && String(it.positive).toLowerCase().includes(q)) return true;
-        if (it && it.negative && String(it.negative).toLowerCase().includes(q)) return true;
-        if (it && it.lens && String(it.lens).toLowerCase().includes(q)) return true;
-        if (it && it.time_of_day && String(it.time_of_day).toLowerCase().includes(q)) return true;
-        if (it && it.light_from && String(it.light_from).toLowerCase().includes(q)) return true;
+        // All terms must be present in the search text (multi-term matching)
+        return terms.every(function(term) {
+          return searchText.includes(term);
+        });
       } catch(_){ }
       return false;
     }
