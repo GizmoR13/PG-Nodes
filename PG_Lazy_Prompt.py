@@ -50,6 +50,43 @@ _RUNTIME_PREFS = {
     "max_entries": 500,
 }
 
+def _get_prefs_file_path() -> str:
+    """Returns path to preferences JSON file."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(here, "PG_Lazy_Prompt_Prefs.json")
+
+def _load_prefs_from_disk() -> Dict[str, Any]:
+    """Load preferences from disk."""
+    path = _get_prefs_file_path()
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                return data
+    except FileNotFoundError:
+        pass
+    except Exception as ex:
+        print(f"[PG prefs] Error loading {path}: {ex}")
+    return {}
+
+def _save_prefs_to_disk(prefs: Dict[str, Any]) -> None:
+    """Save preferences to disk atomically."""
+    path = _get_prefs_file_path()
+    try:
+        temp_path = path + ".tmp"
+        with open(temp_path, "w", encoding="utf-8") as f:
+            json.dump(prefs, f, indent=2, ensure_ascii=False)
+        os.replace(temp_path, path)
+    except Exception as ex:
+        print(f"[PG prefs] Error saving {path}: {ex}")
+
+# Load preferences from disk on module initialization
+_LOADED_PREFS = _load_prefs_from_disk()
+if "history_path" in _LOADED_PREFS:
+    _RUNTIME_PREFS["history_path"] = _LOADED_PREFS["history_path"]
+if "max_entries" in _LOADED_PREFS:
+    _RUNTIME_PREFS["max_entries"] = int(_LOADED_PREFS["max_entries"])
+
 # === Helpers ====================================================================================
 
 def _resolve_cfg_path() -> str:
@@ -1139,12 +1176,15 @@ if PromptServer is not None and web is not None:
                 if "max_entries" in data:
                     try:
                         me = int(data.get("max_entries"))
-                        if 1 <= me <= 1000:
+                        if me >= 1:  # No upper limit, only require positive number
                             _RUNTIME_PREFS["max_entries"] = me
                             updated["max_entries"] = me
                     except Exception:
                         pass
                 snap = dict(_RUNTIME_PREFS)
+                # Save to disk if any preferences were updated
+                if updated:
+                    _save_prefs_to_disk(snap)
             return web.json_response({"ok": True, **snap, "updated": updated})
 
         @routes.post("/pg/history/rename")
