@@ -116,9 +116,9 @@ import { app } from "../../scripts/app.js";
   function get(node, key, def){ var w=findWidget(node,key); return (w&&typeof w.value!=='undefined')?w.value:def; }
   const PG_LAZY_NAMES = new Set([
     // class names
-    'PgLazyPrompt', 'PgLazyPromptMini', 'PgLazyPromptExt',
+    'PgLazyPrompt', 'PgLazyPromptMini', 'PgLazyPromptExt', 'PgPromptSimple',
     // display titles as they appear in ComfyUI UI
-    'Lazy Prompt', 'Lazy Prompt (mini)', 'Lazy Prompt (ext)',
+    'Lazy Prompt', 'Lazy Prompt (mini)', 'Lazy Prompt (ext)', 'Simple Prompt',
   ]);
   function _norm(x){
     return (x == null ? '' : String(x));
@@ -305,12 +305,15 @@ import { app } from "../../scripts/app.js";
     }catch(_){ return Array.isArray(items) ? items : []; }
   }
   // --- 1) apiList: your async style, with `objects:true`
-  async function apiList(node){
+  async function apiList(node, searchQuery){
     const body = {
       history_path: getHistoryPath(node),
       max_entries:  getMaxEntries(node),
       objects: true,
     };
+    if (searchQuery) {
+      body.search_query = String(searchQuery).trim();
+    }
     const r = await fetch('/pg/history/list', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -331,6 +334,21 @@ import { app } from "../../scripts/app.js";
     var j = await r.json().catch(function () { return null; });
     if (!(r.ok && j && j.ok)) throw new Error((j && j.message) || ('HTTP ' + r.status));
     return (j.preview_text || '');
+  }
+  async function apiRename(node, sel, customName) {
+    var body = {
+      history_path: getHistoryPath(node),
+      history_select: sel,
+      custom_name: String(customName || '').trim()
+    };
+    var r = await fetch('/pg/history/rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    var j = await r.json().catch(function () { return null; });
+    if (!(r.ok && j && j.ok)) throw new Error((j && j.message) || ('HTTP ' + r.status));
+    return (j.custom_name || '');
   }
   // Helper: refresh list and preview
   function runRefresh(node){
@@ -395,7 +413,9 @@ import { app } from "../../scripts/app.js";
       // ===== Body / List =====
       '.pg-hist-body{height:var(--pg-hist-body-maxh);overflow:auto;}',
       '.pg-hist-list{display:block;}',
-      '.pg-hist-row{padding:6px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;}',
+      '.pg-hist-row{padding:6px 10px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;gap:8px;}',
+      '.pg-hist-row-text{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
+      '.pg-hist-row-score{flex-shrink:0;font-weight:500;color:#4db8ff;min-width:50px;text-align:right;font-size:12px;}',
       '.pg-hist-row:hover{background:var(--pg-hist-hover);}',
       '.pg-hist-empty,.pg-hist-status{padding:10px 12px;opacity:.8;}',
 
@@ -466,13 +486,23 @@ import { app } from "../../scripts/app.js";
     }
     function matchItem(it, q){
       if (!q) return true;
-      q = String(q).toLowerCase();
-      var l = String(labelOf(it)).toLowerCase();
-      if (l.includes(q)) return true;
+      q = String(q).toLowerCase().trim();
+      if (!q) return true;
+
+      // Split query into terms for multi-term matching
+      var terms = q.split(/\s+/);
+
+      // Build searchable text from all fields
+      var searchText = String(labelOf(it)).toLowerCase();
+      if (it && it.custom_name) searchText += ' ' + String(it.custom_name).toLowerCase();
+      if (it && it.positive) searchText += ' ' + String(it.positive).toLowerCase();
+      if (it && it.negative) searchText += ' ' + String(it.negative).toLowerCase();
+
       try {
-        if (it && it.lens && String(it.lens).toLowerCase().includes(q)) return true;
-        if (it && it.time_of_day && String(it.time_of_day).toLowerCase().includes(q)) return true;
-        if (it && it.light_from && String(it.light_from).toLowerCase().includes(q)) return true;
+        // All terms must be present in the search text (multi-term matching)
+        return terms.every(function(term) {
+          return searchText.includes(term);
+        });
       } catch(_){ }
       return false;
     }
@@ -486,7 +516,13 @@ import { app } from "../../scripts/app.js";
         listEl.innerHTML = '';
       }
       var q = filter.value.trim();
-      var filtered = allItems.filter(function(it){ return matchItem(it, q); });
+      // Use server-side search if query is provided
+      if (q && allItems.length > 0) {
+        // Client-side fallback for filtering (server already filtered if search_query was sent)
+        var filtered = allItems.filter(function(it){ return matchItem(it, q); });
+      } else {
+        var filtered = allItems;
+      }
       if (!filtered.length){
         var empty = document.createElement('div');
         empty.className = 'pg-hist-empty';
@@ -497,10 +533,24 @@ import { app } from "../../scripts/app.js";
       filtered.forEach(function(it){
         var lbl = (it && (it.label_short || it)) || '';
         var kh  = (it && it.key_hash) || '';
+        var score = (it && typeof it.search_score !== 'undefined') ? it.search_score : null;
         var row = document.createElement('div');
         row.className = 'pg-hist-row';
-        row.textContent = String(lbl);
         row.title = String(lbl);
+
+        // Create text span
+        var textSpan = document.createElement('div');
+        textSpan.className = 'pg-hist-row-text';
+        textSpan.textContent = String(lbl);
+        row.appendChild(textSpan);
+
+        // Add score span if searching
+        if (q && score !== null) {
+          var scoreSpan = document.createElement('div');
+          scoreSpan.className = 'pg-hist-row-score';
+          scoreSpan.textContent = Math.round(score) + '%';
+          row.appendChild(scoreSpan);
+        }
         row.onclick = function(){
           status.textContent = 'Loading preview…';
           var sel = kh || String(lbl);
@@ -511,6 +561,29 @@ import { app } from "../../scripts/app.js";
             status.textContent = 'Error: ' + ((e && e.message) || String(e));
           });
         };
+        // Right-click context menu for rename
+        row.oncontextmenu = function(ev){
+          ev.preventDefault();
+          ev.stopPropagation();
+          var currentName = (it && it.custom_name) || '';
+          var newName = prompt('Rename entry:', currentName);
+          if (newName !== null) {
+            status.textContent = 'Renaming…';
+            apiRename(node, kh, newName).then(function(){
+              status.textContent = 'Renamed! Refreshing…';
+              setTimeout(function(){
+                apiList(node, q).then(function(items){
+                  allItems = Array.isArray(items) ? items : [];
+                  renderList();
+                }).catch(function(e){
+                  status.textContent = 'Error: ' + ((e && e.message) || String(e));
+                });
+              }, 300);
+            }).catch(function(e){
+              status.textContent = 'Rename failed: ' + ((e && e.message) || String(e));
+            });
+          }
+        };
         listEl.appendChild(row);
       });
     }
@@ -518,7 +591,24 @@ import { app } from "../../scripts/app.js";
     // interactions
     function escHandler(ev){ if (ev.key === 'Escape'){ destroy(); } }
     document.addEventListener('keydown', escHandler);
-    filter.addEventListener('input', renderList);
+
+    // Filter input: send search query to server and re-render
+    var filterTimeout = null;
+    filter.addEventListener('input', function(){
+      clearTimeout(filterTimeout);
+      filterTimeout = setTimeout(function(){
+        var q = filter.value.trim();
+        status.textContent = 'Searching…';
+        apiList(node, q).then(function(items){
+          allItems = Array.isArray(items) ? items : [];
+          renderList();
+          try { status.style.display = 'none'; } catch(_){ }
+        }).catch(function(e){
+          status.textContent = 'Search error: ' + ((e && e.message) || String(e));
+        });
+      }, 250);
+    });
+
     filter.addEventListener('keydown', function(ev){ if (ev.key === 'Escape'){ ev.stopPropagation(); destroy(); } });
 
     // load data
@@ -720,9 +810,9 @@ import { app } from "../../scripts/app.js";
 
   const PG_LAZY_NAMES = new Set([
     // class names
-    'PgLazyPrompt', 'PgLazyPromptMini', 'PgLazyPromptExt',
+    'PgLazyPrompt', 'PgLazyPromptMini', 'PgLazyPromptExt', 'PgPromptSimple',
     // display titles as they appear in ComfyUI UI
-    'Lazy Prompt', 'Lazy Prompt (mini)', 'Lazy Prompt (ext)',
+    'Lazy Prompt', 'Lazy Prompt (mini)', 'Lazy Prompt (ext)', 'Simple Prompt',
   ]);
   function _norm(x){
     return (x == null ? '' : String(x));
